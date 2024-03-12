@@ -268,9 +268,12 @@ func (le *LeaderElector) renew(ctx context.Context) {
 	wait.Until(func() {
 		timeoutCtx, timeoutCancel := context.WithTimeout(ctx, le.config.RenewDeadline)
 		defer timeoutCancel()
-		err := wait.PollImmediateUntil(le.config.RetryPeriod, func() (bool, error) {
-			return le.tryAcquireOrRenew(timeoutCtx), nil
-		}, timeoutCtx.Done())
+		var err error
+		elapsedPolling := elapsed(func() {
+			err = wait.PollImmediateUntil(le.config.RetryPeriod, func() (bool, error) {
+				return le.tryAcquireOrRenew(timeoutCtx), nil
+			}, timeoutCtx.Done())
+		})
 
 		le.maybeReportTransition()
 		desc := le.config.Lock.Describe()
@@ -280,7 +283,7 @@ func (le *LeaderElector) renew(ctx context.Context) {
 		}
 		le.config.Lock.RecordEvent("stopped leading")
 		le.metrics.leaderOff(le.config.Name)
-		klog.Infof("failed to renew lease %v: %v", desc, err)
+		klog.Infof("failed to renew lease %v (elapsed polling %s): %v", desc, elapsedPolling, err)
 		cancel()
 	}, le.config.RetryPeriod, ctx.Done())
 
